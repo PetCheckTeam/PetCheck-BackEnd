@@ -1,0 +1,43 @@
+# Gradle & Build (빌드 및 의존성 결과물 제외)
+.gradle/
+build/
+bin/
+out/
+!gradle/wrapper/gradle-wrapper.jar
+
+# IntelliJ IDEA (개인 IDE 설정 파일 제외)
+.idea/
+*.iws
+*.iml
+*.ipr
+.DS_Store
+
+# STS & Eclipse
+.apt_generated
+.classpath
+.factorypath
+.project
+.settings
+.springBeans
+.sts4-cache
+
+# VS Code & NetBeans
+.vscode/
+/nbproject/private/
+/nbbuild/
+/dist/
+/nbdist/
+/.nb-gradle/
+
+# 기타 (로그 및 임시 파일)
+*.log
+HELP.md
+
+# 환경 변수 파일 (절대 커밋 금지!)
+.env
+*.env
+
+# Spring Boot 빌드 결과물
+/build/
+/out/
+/target/
