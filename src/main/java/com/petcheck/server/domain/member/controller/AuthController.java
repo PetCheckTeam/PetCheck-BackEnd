@@ -40,10 +40,9 @@ public class AuthController {
         return ResponseEntity.ok().build();
     }
 
-    // 4. 로그인 상태 확인 (현재 사용자 정보 조회)
-    @GetMapping("/me")
-    public ResponseEntity<MemberResponse> getMyInfo(@AuthenticationPrincipal Long memberId) {
-        // SecurityContext에 저장된 회원 ID를 바탕으로 회원 정보를 반환합니다.
+    // 4. 로그인 상태 확인 (임시: memberId를 파라미터로 직접 받아서 테스트)
+    @GetMapping("/me") // TODO 인증 구현 필요 (API 명세서 확인할 것)
+    public ResponseEntity<MemberResponse> getMyInfo(@RequestParam Long memberId) {
         MemberResponse response = authService.getMyInfo(memberId);
         return ResponseEntity.ok(response);
     }
