@@ -35,14 +35,14 @@ public class AuthController {
     // 3. 로그아웃
     @PostMapping("/logout")
     public ResponseEntity<Void> logout() {
-        // JWT 기반 인증에서는 서버 세션을 비우거나 필요한 경우 토큰 블랙리스트 처리를 수행합니다.
         authService.logout();
         return ResponseEntity.ok().build();
     }
 
-    // 4. 로그인 상태 확인 (임시: memberId를 파라미터로 직접 받아서 테스트)
-    @GetMapping("/me") // TODO 인증 구현 필요 (API 명세서 확인할 것)
-    public ResponseEntity<MemberResponse> getMyInfo(@RequestParam Long memberId) {
+    // 4. 로그인 상태 확인 (내 정보 조회)
+    @GetMapping("/me")
+    public ResponseEntity<MemberResponse> getMyInfo(@AuthenticationPrincipal Long memberId) {
+        // JwtAuthenticationFilter에서 저장한 인증 정보(memberId)를 직접 인자로 받습니다.
         MemberResponse response = authService.getMyInfo(memberId);
         return ResponseEntity.ok(response);
     }

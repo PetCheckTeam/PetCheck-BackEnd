@@ -6,7 +6,9 @@ import com.petcheck.server.domain.member.dto.MemberResponse;
 import com.petcheck.server.domain.member.dto.SignupRequest;
 import com.petcheck.server.domain.member.entity.Member;
 import com.petcheck.server.domain.member.repository.MemberRepository;
+import com.petcheck.server.global.config.JwtProvider;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -16,6 +18,8 @@ import org.springframework.transaction.annotation.Transactional;
 public class AuthService {
 
     private final MemberRepository memberRepository;
+    private final PasswordEncoder passwordEncoder; // 👈 비밀번호 암호화/검증용
+    private final JwtProvider jwtProvider;         // 👈 JWT 토큰 생성용
 
     // 1. 회원가입
     @Transactional
@@ -25,10 +29,12 @@ public class AuthService {
             throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
         }
 
-        // Member 엔티티 생성 및 저장 (비밀번호는 우선 평문 저장)
+        // 비밀번호 암호화 후 Member 엔티티 생성 및 저장
+        String encodedPassword = passwordEncoder.encode(request.getPassword());
+
         Member member = Member.builder()
                 .email(request.getEmail())
-                .password(request.getPassword())
+                .password(encodedPassword)
                 .nickname(request.getNickname())
                 .build();
 
@@ -42,20 +48,21 @@ public class AuthService {
         Member member = memberRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new IllegalArgumentException("이메일 또는 비밀번호가 일치하지 않습니다."));
 
-        // 비밀번호 확인 (단순 문자열 비교)
-        if (!member.getPassword().equals(request.getPassword())) {
+        // 비밀번호 암호화 비교 (passwordEncoder.matches 사용)
+        if (!passwordEncoder.matches(request.getPassword(), member.getPassword())) {
             throw new IllegalArgumentException("이메일 또는 비밀번호가 일치하지 않습니다.");
         }
 
-        // 토큰 대신 임시 토큰 값("dummy-token") 전달
-        String dummyToken = "dummy-jwt-token-for-dev";
+        // 진짜 JWT Access Token 생성!
+        String accessToken = jwtProvider.createToken(member.getId(), member.getEmail());
 
-        return LoginResponse.of(dummyToken, MemberResponse.from(member));
+        return LoginResponse.of(accessToken, MemberResponse.from(member));
     }
 
     // 3. 로그아웃
     public void logout() {
-        // 현재는 별도 처리 없이 성공 응답만 반환
+        // Client 측에서 저장된 Token을 삭제하는 방식(Stateless)을 사용할 경우 backend 비즈니스 로직은 비워둡니다.
+        // (추후 Redis 등을 도입해 Blacklist 처리를 할 때 이곳에 로직을 추가합니다.)
     }
 
     // 4. 로그인 상태 확인 (내 정보 조회)

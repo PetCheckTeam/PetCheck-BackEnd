@@ -9,10 +9,17 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
+
+    private final JwtProvider jwtProvider;
+
+    public SecurityConfig(JwtProvider jwtProvider) {
+        this.jwtProvider = jwtProvider;
+    }
 
     @Bean
     public PasswordEncoder passwordEncoder() {
@@ -27,13 +34,13 @@ public class SecurityConfig {
                 .httpBasic(AbstractHttpConfigurer::disable)
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
-                                // TODO [임시 변경] 개발 및 Postman 테스트를 위해 모든 요청 허용
-                                .requestMatchers("/**").permitAll()
-
-                        // 🔽 [추후 JWT 완성 시 다시 복원할 코드]
-                        // .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/login").permitAll()
-                        // .anyRequest().authenticated()
-                );
+                        // 회원가입, 로그인은 인증 없이(X) 허용
+                        .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/login").permitAll()
+                        // 그 외(로그아웃, 로그인 상태 확인 등)는 모두 인증(O) 필요
+                        .anyRequest().authenticated()
+                )
+                // JWT 필터를 UsernamePasswordAuthenticationFilter 전에 실행
+                .addFilterBefore(new JwtAuthenticationFilter(jwtProvider), UsernamePasswordAuthenticationFilter.class);
 
         return http.build();
     }
