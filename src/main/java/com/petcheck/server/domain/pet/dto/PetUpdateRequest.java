@@ -13,9 +13,4 @@ public class PetUpdateRequest {
 
     @NotBlank(message = "수정할 종(species)은 필수입니다.")
     private String species;
-
-    public PetUpdateRequest(String name, String species) {
-        this.name = name;
-        this.species = species;
-    }
 }
