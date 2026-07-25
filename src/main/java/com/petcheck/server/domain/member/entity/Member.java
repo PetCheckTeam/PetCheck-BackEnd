@@ -31,4 +31,9 @@ public class Member {
         this.password = password;
         this.nickname = nickname;
     }
+
+    // 닉네임 수정 비즈니스 메서드
+    public void updateNickname(String nickname) {
+        this.nickname = nickname;
+    }
 }

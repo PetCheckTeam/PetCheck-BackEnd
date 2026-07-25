@@ -35,8 +35,8 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         // 회원가입, 로그인은 인증 없이(X) 허용
-                        .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/login").permitAll()
-                        // 그 외(로그아웃, 로그인 상태 확인 등)는 모두 인증(O) 필요
+                        .requestMatchers("/api/v1/auth/signup", "/api/v1/auth/login").permitAll() // 누구나 접근 가능
+                        .requestMatchers("/api/v1/users/**").authenticated() // users 관련 요청은 인증된 사용자만 허용 할 것
                         .anyRequest().authenticated()
                 )
                 // JWT 필터를 UsernamePasswordAuthenticationFilter 전에 실행
