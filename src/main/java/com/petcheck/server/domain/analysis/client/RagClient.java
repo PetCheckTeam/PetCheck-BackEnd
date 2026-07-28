@@ -2,6 +2,8 @@ package com.petcheck.server.domain.analysis.client;
 
 import com.petcheck.server.domain.analysis.dto.RagSearchRequest;
 import com.petcheck.server.domain.analysis.dto.RagSearchResponse;
+import com.petcheck.server.domain.chat.dto.RagChatRequest;
+import com.petcheck.server.domain.chat.dto.RagChatResponse;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -23,21 +25,35 @@ import java.time.Duration;
 public class RagClient {
 
     private static final String SEARCH_PATH = "/api/v1/rag/search";
+    private static final String CHAT_PATH = "/api/v1/rag/chat";
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(60);
+    private static final Duration CHAT_READ_TIMEOUT = Duration.ofSeconds(90);
     private static final int MAX_ERROR_RESPONSE_LENGTH = 2000;
 
     private final RestTemplate restTemplate;
+    private final RestTemplate chatRestTemplate;
     private final String searchUrl;
+    private final String chatUrl;
 
     @Autowired
     public RagClient(@Value("${rag.base-url}") String baseUrl) {
-        this(createRestTemplate(), baseUrl);
+        this(
+                createRestTemplate(READ_TIMEOUT),
+                createRestTemplate(CHAT_READ_TIMEOUT),
+                baseUrl
+        );
     }
 
     RagClient(RestTemplate restTemplate, String baseUrl) {
+        this(restTemplate, restTemplate, baseUrl);
+    }
+
+    RagClient(RestTemplate restTemplate, RestTemplate chatRestTemplate, String baseUrl) {
         this.restTemplate = restTemplate;
+        this.chatRestTemplate = chatRestTemplate;
         this.searchUrl = normalizeBaseUrl(baseUrl) + SEARCH_PATH;
+        this.chatUrl = normalizeBaseUrl(baseUrl) + CHAT_PATH;
     }
 
     public RagSearchResponse search(RagSearchRequest requestBody) {
@@ -101,10 +117,69 @@ public class RagClient {
         }
     }
 
-    private static RestTemplate createRestTemplate() {
+    public RagChatResponse chat(RagChatRequest requestBody) {
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        HttpEntity<RagChatRequest> request = new HttpEntity<>(requestBody, headers);
+
+        try {
+            ResponseEntity<RagChatResponse> response = chatRestTemplate.postForEntity(
+                    chatUrl,
+                    request,
+                    RagChatResponse.class
+            );
+
+            if (response.getBody() == null) {
+                throw new RagClientException(
+                        RagClientException.Type.EMPTY_RESPONSE,
+                        "RAG 챗 서버가 빈 응답을 반환했습니다."
+                );
+            }
+            return response.getBody();
+        } catch (HttpClientErrorException error) {
+            throw new RagClientException(
+                    RagClientException.Type.CLIENT_ERROR,
+                    error.getStatusCode().value(),
+                    "RAG 챗 서버가 요청을 거부했습니다. HTTP "
+                            + error.getStatusCode().value(),
+                    error
+            );
+        } catch (HttpServerErrorException error) {
+            throw new RagClientException(
+                    RagClientException.Type.SERVER_ERROR,
+                    error.getStatusCode().value(),
+                    "RAG 챗 서버 내부 오류가 발생했습니다. HTTP "
+                            + error.getStatusCode().value(),
+                    error
+            );
+        } catch (ResourceAccessException error) {
+            if (isTimeout(error)) {
+                throw new RagClientException(
+                        RagClientException.Type.TIMEOUT,
+                        "RAG 챗 서버 응답 시간이 초과되었습니다.",
+                        error
+                );
+            }
+            throw new RagClientException(
+                    RagClientException.Type.CONNECTION,
+                    "RAG 챗 서버에 연결할 수 없습니다.",
+                    error
+            );
+        } catch (RagClientException error) {
+            throw error;
+        } catch (RestClientException error) {
+            throw new RagClientException(
+                    RagClientException.Type.UNEXPECTED,
+                    "RAG 챗 서버 호출 중 예상하지 못한 오류가 발생했습니다.",
+                    error
+            );
+        }
+    }
+
+    private static RestTemplate createRestTemplate(Duration readTimeout) {
         SimpleClientHttpRequestFactory requestFactory = new SimpleClientHttpRequestFactory();
         requestFactory.setConnectTimeout(CONNECT_TIMEOUT);
-        requestFactory.setReadTimeout(READ_TIMEOUT);
+        requestFactory.setReadTimeout(readTimeout);
         return new RestTemplate(requestFactory);
     }
 

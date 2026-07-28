@@ -46,8 +46,10 @@ public class AnalysisService {
         Member member = memberRepository.findById(memberId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 회원입니다."));
 
-        Pet pet = petRepository.findById(request.getPetId())
-                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 반려동물입니다."));
+        Pet pet = petRepository.findByIdAndMemberId(request.getPetId(), memberId)
+                .orElseThrow(() -> new IllegalArgumentException(
+                        "반려동물을 찾을 수 없거나 접근 권한이 없습니다."
+                ));
 
         // Step A: NCP Object Storage에 이미지 업로드
         String imageUrl = imageUploadService.uploadImage(imageFile);

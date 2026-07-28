@@ -3,6 +3,7 @@ package com.petcheck.server.domain.analysis.service;
 import com.petcheck.server.domain.analysis.client.RagClient;
 import com.petcheck.server.domain.analysis.client.RagClientException;
 import com.petcheck.server.domain.analysis.dto.AnalysisDetailResponse;
+import com.petcheck.server.domain.analysis.dto.AnalysisStartRequest;
 import com.petcheck.server.domain.analysis.dto.IngredientMatchStatus;
 import com.petcheck.server.domain.analysis.dto.PersonalizedAnalysisResult;
 import com.petcheck.server.domain.analysis.dto.RagContextItem;
@@ -12,6 +13,7 @@ import com.petcheck.server.domain.analysis.entity.Analysis;
 import com.petcheck.server.domain.analysis.entity.AnalysisStatus;
 import com.petcheck.server.domain.analysis.repository.AnalysisRepository;
 import com.petcheck.server.domain.ingredient.entity.Ingredient;
+import com.petcheck.server.domain.member.entity.Member;
 import com.petcheck.server.domain.member.repository.MemberRepository;
 import com.petcheck.server.domain.pet.entity.Pet;
 import com.petcheck.server.domain.pet.entity.PetAvoidIngredient;
@@ -24,6 +26,7 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.web.multipart.MultipartFile;
 import tools.jackson.databind.ObjectMapper;
 
 import java.util.Arrays;
@@ -31,7 +34,9 @@ import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -289,6 +294,25 @@ class AnalysisServiceTest {
         assertThat(status).isEqualTo(AnalysisStatus.FAILED);
         assertThat(analysis.getAiAnalysisResult()).isNull();
         verifyNoInteractions(petAvoidIngredientRepository);
+    }
+
+    @Test
+    void 다른_회원의_반려동물로는_분석을_생성할_수_없다() {
+        Member member = mock(Member.class);
+        AnalysisStartRequest request = mock(AnalysisStartRequest.class);
+        MultipartFile imageFile = mock(MultipartFile.class);
+        when(memberRepository.findById(MEMBER_ID)).thenReturn(Optional.of(member));
+        when(request.getPetId()).thenReturn(PET_ID);
+        when(petRepository.findByIdAndMemberId(PET_ID, MEMBER_ID))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> analysisService.createAnalysis(MEMBER_ID, request, imageFile))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("접근 권한");
+
+        verify(petRepository, never()).findById(PET_ID);
+        verifyNoInteractions(imageUploadService, ocrService);
+        verify(analysisRepository, never()).save(any());
     }
 
     private Analysis analysis(String ocrText) {
