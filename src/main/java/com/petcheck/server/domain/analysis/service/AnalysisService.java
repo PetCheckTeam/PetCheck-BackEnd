@@ -1,5 +1,6 @@
 package com.petcheck.server.domain.analysis.service;
 
+import com.petcheck.server.domain.analysis.client.RagClient;
 import com.petcheck.server.domain.analysis.dto.*;
 import com.petcheck.server.domain.analysis.entity.Analysis;
 import com.petcheck.server.domain.analysis.entity.AnalysisStatus;
@@ -9,11 +10,14 @@ import com.petcheck.server.domain.member.repository.MemberRepository;
 import com.petcheck.server.domain.pet.entity.Pet;
 import com.petcheck.server.domain.pet.repository.PetRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import tools.jackson.databind.ObjectMapper;
 
 @Service
+@Slf4j
 @RequiredArgsConstructor
 @Transactional(readOnly = true)
 public class AnalysisService {
@@ -23,6 +27,8 @@ public class AnalysisService {
     private final PetRepository petRepository;
     private final ImageUploadService imageUploadService;
     private final OcrService ocrService;
+    private final RagClient ragClient;
+    private final ObjectMapper objectMapper;
 
     // 1. [POST /api/v1/analyses] 분석 생성 및 OCR 시작
     @Transactional
@@ -75,14 +81,35 @@ public class AnalysisService {
     @Transactional
     public AnalysisStatus confirmAndStartAi(Long memberId, Long analysisId) {
         Analysis analysis = findAnalysisWithAuth(analysisId, memberId);
-
-        // AI 분석 상태로 전환
         analysis.startAiAnalysis();
 
-        // TODO: (추후 4단계) HyperCLOVA X 등 AI 분석 호출 및 결과 저장 로직 연동 위치
-        // 현재는 흐름 동작을 위해 완성 처리 예시 코드
-        String mockAiResponse = "해당 사료는 " + analysis.getPet().getName() + "의 연령과 영양 균형에 적합합니다.";
-        analysis.completeAiAnalysis(mockAiResponse);
+        String ocrText = analysis.getOcrEditedResult();
+        if (ocrText == null || ocrText.isBlank()) {
+            analysis.retry(AnalysisStatus.FAILED);
+            log.warn("RAG 분석 실패 - analysisId: {}, 원인: OCR 텍스트가 비어 있습니다.", analysisId);
+            return analysis.getStatus();
+        }
+
+        try {
+            RagSearchRequest request = RagSearchRequest.builder()
+                    .analysisId(analysisId)
+                    .ocrText(ocrText)
+                    .topK(1)
+                    .petType(analysis.getPet().getSpecies())
+                    .build();
+
+            RagSearchResponse response = ragClient.search(request);
+            String ragResultJson = objectMapper.writeValueAsString(response);
+            analysis.completeAiAnalysis(ragResultJson);
+        } catch (Exception error) {
+            analysis.retry(AnalysisStatus.FAILED);
+            log.error(
+                    "RAG 분석 실패 - analysisId: {}, 오류 유형: {}, 원인: {}",
+                    analysisId,
+                    error.getClass().getSimpleName(),
+                    error.getMessage()
+            );
+        }
 
         return analysis.getStatus();
     }

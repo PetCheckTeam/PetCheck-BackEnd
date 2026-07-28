@@ -1,0 +1,27 @@
+spring:
+  datasource:
+    driver-class-name: org.h2.Driver
+    url: jdbc:h2:mem:petcheck;MODE=PostgreSQL;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: create-drop
+
+jwt:
+  secret: test-jwt-secret-key-must-be-at-least-32-bytes
+  expiration: 86400000
+
+ncp:
+  storage:
+    endpoint: http://127.0.0.1:9000
+    region: test-region
+    access-key: test-access-key
+    secret-key: test-secret-key
+    bucket: test-bucket
+  ocr:
+    invoke-url: http://127.0.0.1:9999/test-ocr
+    secret-key: test-ocr-secret
+
+rag:
+  base-url: http://127.0.0.1:8100

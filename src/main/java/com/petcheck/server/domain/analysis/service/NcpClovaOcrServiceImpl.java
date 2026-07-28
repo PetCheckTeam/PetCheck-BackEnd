@@ -68,9 +68,85 @@ public class NcpClovaOcrServiceImpl implements OcrService {
         }
     }
 
-    private String parseOcrResponse(String responseBody) {
-        // 기존 작성하신 JSON 파싱 및 텍스트 추출 로직 유지
-        // ...
-        return responseBody;
+    String parseOcrResponse(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            throw new IllegalStateException("CLOVA OCR 응답이 비어 있습니다.");
+        }
+
+        JSONObject response = new JSONObject(responseBody);
+        JSONArray images = response.optJSONArray("images");
+        if (images == null || images.isEmpty()) {
+            throw new IllegalStateException("CLOVA OCR 응답에 images가 없습니다.");
+        }
+
+        StringBuilder extractedText = new StringBuilder();
+        boolean foundText = false;
+
+        for (int imageIndex = 0; imageIndex < images.length(); imageIndex++) {
+            JSONObject image = images.optJSONObject(imageIndex);
+            if (image == null) {
+                continue;
+            }
+
+            JSONArray fields = image.optJSONArray("fields");
+            if (fields == null) {
+                continue;
+            }
+
+            for (int fieldIndex = 0; fieldIndex < fields.length(); fieldIndex++) {
+                JSONObject field = fields.optJSONObject(fieldIndex);
+                if (field == null) {
+                    continue;
+                }
+
+                String inferText = field.optString("inferText", "").trim();
+                if (inferText.isEmpty()) {
+                    continue;
+                }
+
+                appendOcrField(extractedText, inferText);
+                foundText = true;
+
+                if (field.optBoolean("lineBreak", false)) {
+                    appendLineBreak(extractedText);
+                }
+            }
+
+            if (foundText && imageIndex < images.length() - 1) {
+                appendLineBreak(extractedText);
+            }
+        }
+
+        String result = extractedText.toString().strip();
+        if (!foundText || result.isEmpty()) {
+            throw new IllegalStateException("CLOVA OCR 응답에서 inferText를 찾을 수 없습니다.");
+        }
+        return result;
+    }
+
+    private void appendOcrField(StringBuilder target, String value) {
+        if (target.isEmpty()) {
+            target.append(value);
+            return;
+        }
+
+        char previous = target.charAt(target.length() - 1);
+        char current = value.charAt(0);
+        boolean punctuation = ",.;:!?%)]}〉》」』、，。".indexOf(current) >= 0;
+        boolean afterOpeningBracket = "([{〈《「『".indexOf(previous) >= 0;
+
+        if (!Character.isWhitespace(previous) && !punctuation && !afterOpeningBracket) {
+            target.append(' ');
+        }
+        target.append(value);
+    }
+
+    private void appendLineBreak(StringBuilder target) {
+        while (!target.isEmpty() && target.charAt(target.length() - 1) == ' ') {
+            target.deleteCharAt(target.length() - 1);
+        }
+        if (!target.isEmpty() && target.charAt(target.length() - 1) != '\n') {
+            target.append('\n');
+        }
     }
 }
