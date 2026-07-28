@@ -4,6 +4,7 @@ import com.petcheck.server.domain.analysis.dto.RagSearchRequest;
 import com.petcheck.server.domain.analysis.dto.RagSearchResponse;
 import com.petcheck.server.domain.chat.dto.RagChatRequest;
 import com.petcheck.server.domain.chat.dto.RagChatResponse;
+import com.petcheck.server.domain.chat.dto.RagPetChatRequest;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -19,6 +20,7 @@ import java.util.List;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -249,6 +251,72 @@ class RagClientTest {
         server.verify();
     }
 
+    @Test
+    void Pet_챗_요청을_전용_경로로_전송하고_응답을_변환한다() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        RagClient ragClient = new RagClient(restTemplate, BASE_URL);
+
+        server.expect(requestTo(BASE_URL + "/api/v1/rag/pet-chat"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(content().json("""
+                        {
+                          "petId": 5,
+                          "petName": "보리",
+                          "petType": "DOG",
+                          "avoidIngredients": ["닭고기", "밀"],
+                          "question": "어떤 간식이 좋을까?",
+                          "history": []
+                        }
+                        """))
+                .andRespond(withSuccess("""
+                        {
+                          "answer": "회피 성분을 제외한 간식을 선택해 주세요.",
+                          "model": "HCX-DASH-002",
+                          "finishReason": "stop",
+                          "usage": {
+                            "promptTokens": 0,
+                            "completionTokens": 0,
+                            "totalTokens": 0
+                          },
+                          "sources": []
+                        }
+                        """, MediaType.APPLICATION_JSON));
+
+        RagChatResponse response = ragClient.petChat(petChatRequest());
+
+        assertThat(response.getAnswer()).contains("회피 성분");
+        assertThat(response.getSources()).isEmpty();
+        server.verify();
+    }
+
+    @Test
+    void Pet_챗의_잘못된_JSON_응답을_파싱_오류로_구분한다() {
+        RestTemplate restTemplate = new RestTemplate();
+        MockRestServiceServer server = MockRestServiceServer.createServer(restTemplate);
+        RagClient ragClient = new RagClient(restTemplate, BASE_URL);
+
+        server.expect(requestTo(BASE_URL + "/api/v1/rag/pet-chat"))
+                .andRespond(withSuccess("{not-json", MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> ragClient.petChat(petChatRequest()))
+                .isInstanceOfSatisfying(RagClientException.class, error ->
+                        assertThat(error.getType()).isEqualTo(RagClientException.Type.UNEXPECTED));
+        server.verify();
+    }
+
+    @Test
+    void Pet_챗_timeout을_구분한다() {
+        ClientHttpRequestFactory requestFactory = (uri, httpMethod) -> {
+            throw new SocketTimeoutException("Read timed out");
+        };
+        RagClient ragClient = new RagClient(new RestTemplate(requestFactory), BASE_URL);
+
+        assertThatThrownBy(() -> ragClient.petChat(petChatRequest()))
+                .isInstanceOfSatisfying(RagClientException.class, error ->
+                        assertThat(error.getType()).isEqualTo(RagClientException.Type.TIMEOUT));
+    }
+
     private RagSearchRequest request() {
         return RagSearchRequest.builder()
                 .analysisId(10L)
@@ -268,6 +336,17 @@ class RagClientTest {
                 .ocrText("계육분")
                 .ingredientResults(List.of())
                 .question("이 사료를 먹여도 돼?")
+                .history(List.of())
+                .build();
+    }
+
+    private RagPetChatRequest petChatRequest() {
+        return RagPetChatRequest.builder()
+                .petId(5L)
+                .petName("보리")
+                .petType("DOG")
+                .avoidIngredients(List.of("닭고기", "밀"))
+                .question("어떤 간식이 좋을까?")
                 .history(List.of())
                 .build();
     }

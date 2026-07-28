@@ -4,6 +4,7 @@ import com.petcheck.server.domain.analysis.dto.RagSearchRequest;
 import com.petcheck.server.domain.analysis.dto.RagSearchResponse;
 import com.petcheck.server.domain.chat.dto.RagChatRequest;
 import com.petcheck.server.domain.chat.dto.RagChatResponse;
+import com.petcheck.server.domain.chat.dto.RagPetChatRequest;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpEntity;
@@ -26,6 +27,7 @@ public class RagClient {
 
     private static final String SEARCH_PATH = "/api/v1/rag/search";
     private static final String CHAT_PATH = "/api/v1/rag/chat";
+    private static final String PET_CHAT_PATH = "/api/v1/rag/pet-chat";
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(60);
     private static final Duration CHAT_READ_TIMEOUT = Duration.ofSeconds(90);
@@ -35,6 +37,7 @@ public class RagClient {
     private final RestTemplate chatRestTemplate;
     private final String searchUrl;
     private final String chatUrl;
+    private final String petChatUrl;
 
     @Autowired
     public RagClient(@Value("${rag.base-url}") String baseUrl) {
@@ -54,6 +57,7 @@ public class RagClient {
         this.chatRestTemplate = chatRestTemplate;
         this.searchUrl = normalizeBaseUrl(baseUrl) + SEARCH_PATH;
         this.chatUrl = normalizeBaseUrl(baseUrl) + CHAT_PATH;
+        this.petChatUrl = normalizeBaseUrl(baseUrl) + PET_CHAT_PATH;
     }
 
     public RagSearchResponse search(RagSearchRequest requestBody) {
@@ -118,13 +122,21 @@ public class RagClient {
     }
 
     public RagChatResponse chat(RagChatRequest requestBody) {
+        return executeChat(chatUrl, requestBody);
+    }
+
+    public RagChatResponse petChat(RagPetChatRequest requestBody) {
+        return executeChat(petChatUrl, requestBody);
+    }
+
+    private RagChatResponse executeChat(String url, Object requestBody) {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        HttpEntity<RagChatRequest> request = new HttpEntity<>(requestBody, headers);
+        HttpEntity<Object> request = new HttpEntity<>(requestBody, headers);
 
         try {
             ResponseEntity<RagChatResponse> response = chatRestTemplate.postForEntity(
-                    chatUrl,
+                    url,
                     request,
                     RagChatResponse.class
             );
