@@ -1,3 +1,6 @@
+// 7월 27일 월요일 14:37 수정
+// 수정 내용: 반려동물 삭제 전에 해당 반려동물의 기피 성분 관계를 먼저 삭제하도록 처리했습니다.
+// 수정 이유: pet_avoid_ingredients의 pet_id 외래키로 인한 반려동물 삭제 오류를 방지하기 위함입니다.
 package com.petcheck.server.domain.pet.service;
 
 import com.petcheck.server.domain.member.entity.Member;
@@ -6,6 +9,7 @@ import com.petcheck.server.domain.pet.dto.PetCreateRequest;
 import com.petcheck.server.domain.pet.dto.PetResponse;
 import com.petcheck.server.domain.pet.dto.PetUpdateRequest;
 import com.petcheck.server.domain.pet.entity.Pet;
+import com.petcheck.server.domain.pet.repository.PetAvoidIngredientRepository;
 import com.petcheck.server.domain.pet.repository.PetRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -21,6 +25,7 @@ public class PetService {
 
     private final PetRepository petRepository;
     private final MemberRepository memberRepository;
+    private final PetAvoidIngredientRepository petAvoidIngredientRepository;
 
     // 1. 반려동물 등록
     @Transactional
@@ -83,6 +88,7 @@ public class PetService {
             throw new IllegalArgumentException("삭제 권한이 없는 반려동물입니다.");
         }
 
+        petAvoidIngredientRepository.deleteAllByPetId(petId);
         petRepository.delete(pet);
     }
 }
