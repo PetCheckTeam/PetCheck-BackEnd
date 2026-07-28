@@ -24,7 +24,7 @@ public class RagClient {
 
     private static final String SEARCH_PATH = "/api/v1/rag/search";
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
-    private static final Duration READ_TIMEOUT = Duration.ofSeconds(10);
+    private static final Duration READ_TIMEOUT = Duration.ofSeconds(60);
     private static final int MAX_ERROR_RESPONSE_LENGTH = 2000;
 
     private final RestTemplate restTemplate;
