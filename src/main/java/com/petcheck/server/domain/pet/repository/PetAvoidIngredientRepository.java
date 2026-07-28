@@ -4,6 +4,7 @@
 package com.petcheck.server.domain.pet.repository;
 
 import com.petcheck.server.domain.pet.entity.PetAvoidIngredient;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 
 import java.util.List;
@@ -14,6 +15,9 @@ public interface PetAvoidIngredientRepository extends JpaRepository<PetAvoidIngr
     boolean existsByPetIdAndIngredientId(Long petId, Long ingredientId);
 
     List<PetAvoidIngredient> findAllByPetId(Long petId);
+
+    @EntityGraph(attributePaths = "ingredient")
+    List<PetAvoidIngredient> findAllByPetIdAndPetMemberId(Long petId, Long memberId);
 
     Optional<PetAvoidIngredient> findByPetIdAndIngredientId(Long petId, Long ingredientId);
 

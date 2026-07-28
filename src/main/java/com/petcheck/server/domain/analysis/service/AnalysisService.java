@@ -8,13 +8,22 @@ import com.petcheck.server.domain.analysis.repository.AnalysisRepository;
 import com.petcheck.server.domain.member.entity.Member;
 import com.petcheck.server.domain.member.repository.MemberRepository;
 import com.petcheck.server.domain.pet.entity.Pet;
+import com.petcheck.server.domain.pet.entity.PetAvoidIngredient;
+import com.petcheck.server.domain.pet.repository.PetAvoidIngredientRepository;
 import com.petcheck.server.domain.pet.repository.PetRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
+import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
+
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 
 @Service
 @Slf4j
@@ -25,6 +34,7 @@ public class AnalysisService {
     private final AnalysisRepository analysisRepository;
     private final MemberRepository memberRepository;
     private final PetRepository petRepository;
+    private final PetAvoidIngredientRepository petAvoidIngredientRepository;
     private final ImageUploadService imageUploadService;
     private final OcrService ocrService;
     private final RagClient ragClient;
@@ -67,7 +77,8 @@ public class AnalysisService {
     // 2. [GET /api/v1/analyses/{analysisId}] 분석 상태·결과 조회
     public AnalysisDetailResponse getAnalysisDetail(Long memberId, Long analysisId) {
         Analysis analysis = findAnalysisWithAuth(analysisId, memberId);
-        return AnalysisDetailResponse.from(analysis);
+        PersonalizedAnalysisResult aiAnalysisResult = deserializeAiAnalysisResult(analysis, memberId);
+        return AnalysisDetailResponse.from(analysis, aiAnalysisResult);
     }
 
     // 3. [PUT /api/v1/analyses/{analysisId}/ocr] OCR 결과 수정
@@ -103,8 +114,15 @@ public class AnalysisService {
                     .build();
 
             RagSearchResponse response = ragClient.search(request);
-            String ragResultJson = objectMapper.writeValueAsString(response);
-            analysis.completeAiAnalysis(ragResultJson);
+            List<PetAvoidIngredient> avoidIngredients = petAvoidIngredientRepository
+                    .findAllByPetIdAndPetMemberId(analysis.getPet().getId(), memberId);
+            PersonalizedAnalysisResult personalizedResult = createPersonalizedResult(
+                    analysisId,
+                    response,
+                    avoidIngredients
+            );
+            String personalizedResultJson = objectMapper.writeValueAsString(personalizedResult);
+            analysis.completeAiAnalysis(personalizedResultJson);
         } catch (Exception error) {
             analysis.retry(AnalysisStatus.FAILED);
             log.error(
@@ -116,6 +134,144 @@ public class AnalysisService {
         }
 
         return analysis.getStatus();
+    }
+
+    private PersonalizedAnalysisResult createPersonalizedResult(
+            Long analysisId,
+            RagSearchResponse response,
+            List<PetAvoidIngredient> avoidIngredients
+    ) {
+        List<RagContextItem> contexts = response != null && response.getContexts() != null
+                ? response.getContexts()
+                : List.of();
+        Map<String, PetAvoidIngredient> avoidIngredientByName = indexAvoidIngredients(avoidIngredients);
+        List<IngredientMatchResult> ingredientResults = new ArrayList<>();
+        List<IngredientMatchResult> matchedIngredients = new ArrayList<>();
+
+        for (RagContextItem context : contexts) {
+            IngredientMatchResult result = matchIngredient(context, avoidIngredientByName);
+            ingredientResults.add(result);
+            if (result.getMatchStatus() == IngredientMatchStatus.MATCHED) {
+                matchedIngredients.add(result);
+            }
+        }
+
+        Integer ragTotalCount = response != null ? response.getTotalCount() : null;
+        int totalIngredientCount = ragTotalCount != null && ragTotalCount >= 0
+                ? ragTotalCount
+                : contexts.size();
+        Long resultAnalysisId = response != null && response.getAnalysisId() != null
+                ? response.getAnalysisId()
+                : analysisId;
+
+        return PersonalizedAnalysisResult.builder()
+                .analysisId(resultAnalysisId)
+                .totalIngredientCount(totalIngredientCount)
+                .matchedCount(matchedIngredients.size())
+                .matchedIngredients(matchedIngredients)
+                .ingredientResults(ingredientResults)
+                .build();
+    }
+
+    private Map<String, PetAvoidIngredient> indexAvoidIngredients(
+            List<PetAvoidIngredient> avoidIngredients
+    ) {
+        Map<String, PetAvoidIngredient> indexedIngredients = new LinkedHashMap<>();
+        if (avoidIngredients == null) {
+            return indexedIngredients;
+        }
+
+        for (PetAvoidIngredient avoidIngredient : avoidIngredients) {
+            if (avoidIngredient == null || avoidIngredient.getIngredient() == null) {
+                continue;
+            }
+            String normalizedName = normalizeIngredientName(
+                    avoidIngredient.getIngredient().getStandardName()
+            );
+            if (normalizedName != null) {
+                indexedIngredients.putIfAbsent(normalizedName, avoidIngredient);
+            }
+        }
+        return indexedIngredients;
+    }
+
+    private IngredientMatchResult matchIngredient(
+            RagContextItem context,
+            Map<String, PetAvoidIngredient> avoidIngredientByName
+    ) {
+        String ocrIngredient = context != null ? context.getOcrIngredient() : null;
+        String ingredientName = context != null ? context.getIngredientName() : null;
+        String normalizedIngredientName = normalizeIngredientName(ingredientName);
+        String normalizedOcrIngredient = normalizeIngredientName(ocrIngredient);
+
+        PetAvoidIngredient matchedAvoidIngredient = normalizedIngredientName != null
+                ? avoidIngredientByName.get(normalizedIngredientName)
+                : null;
+        if (matchedAvoidIngredient == null && normalizedOcrIngredient != null) {
+            matchedAvoidIngredient = avoidIngredientByName.get(normalizedOcrIngredient);
+        }
+
+        IngredientMatchStatus matchStatus;
+        if (matchedAvoidIngredient != null) {
+            matchStatus = IngredientMatchStatus.MATCHED;
+        } else if (normalizedIngredientName == null && normalizedOcrIngredient == null) {
+            matchStatus = IngredientMatchStatus.UNKNOWN;
+        } else {
+            matchStatus = IngredientMatchStatus.NOT_MATCHED;
+        }
+
+        return IngredientMatchResult.builder()
+                .ocrIngredient(ocrIngredient)
+                .ingredientName(ingredientName)
+                .matchStatus(matchStatus)
+                .matchedAvoidIngredientId(matchedAvoidIngredient != null
+                        ? matchedAvoidIngredient.getIngredient().getId()
+                        : null)
+                .matchedAvoidIngredientName(matchedAvoidIngredient != null
+                        ? matchedAvoidIngredient.getIngredient().getStandardName()
+                        : null)
+                .description(context != null ? context.getDescription() : null)
+                .similarityScore(context != null ? context.getSimilarityScore() : null)
+                .build();
+    }
+
+    private String normalizeIngredientName(String name) {
+        if (name == null || name.isBlank()) {
+            return null;
+        }
+        String normalizedName = name
+                .replaceAll("[\\s-]", "")
+                .toLowerCase(Locale.ROOT);
+        return normalizedName.isBlank() ? null : normalizedName;
+    }
+
+    private PersonalizedAnalysisResult deserializeAiAnalysisResult(Analysis analysis, Long memberId) {
+        String storedResult = analysis.getAiAnalysisResult();
+        if (storedResult == null || storedResult.isBlank()) {
+            return null;
+        }
+
+        try {
+            JsonNode resultNode = objectMapper.readTree(storedResult);
+            if (resultNode.has("matchedIngredients") || resultNode.has("ingredientResults")) {
+                return objectMapper.treeToValue(resultNode, PersonalizedAnalysisResult.class);
+            }
+
+            RagSearchResponse legacyRagResponse = objectMapper.treeToValue(
+                    resultNode,
+                    RagSearchResponse.class
+            );
+            List<PetAvoidIngredient> avoidIngredients = petAvoidIngredientRepository
+                    .findAllByPetIdAndPetMemberId(analysis.getPet().getId(), memberId);
+            return createPersonalizedResult(analysis.getId(), legacyRagResponse, avoidIngredients);
+        } catch (Exception error) {
+            log.warn(
+                    "맞춤 분석 결과 역직렬화 실패 - analysisId: {}, 원인: {}",
+                    analysis.getId(),
+                    error.getMessage()
+            );
+            return null;
+        }
     }
 
     private void logRagRequest(Long analysisId, String petType, int topK, String ocrText) {

@@ -16,9 +16,12 @@ public class AnalysisDetailResponse {
     private String imageUrl;
     private AnalysisStatus status;
     private String ocrResult;       // 유저가 수정한 성분 목록 또는 OCR 원본
-    private String aiAnalysisResult; // AI 최종 분석 결과 리포트
+    private PersonalizedAnalysisResult aiAnalysisResult; // 구조화된 맞춤 분석 결과
 
-    public static AnalysisDetailResponse from(Analysis analysis) {
+    public static AnalysisDetailResponse from(
+            Analysis analysis,
+            PersonalizedAnalysisResult aiAnalysisResult
+    ) {
         return AnalysisDetailResponse.builder()
                 .analysisId(analysis.getId())
                 .petId(analysis.getPet().getId())
@@ -26,7 +29,7 @@ public class AnalysisDetailResponse {
                 .imageUrl(analysis.getImageUrl())
                 .status(analysis.getStatus())
                 .ocrResult(analysis.getOcrEditedResult() != null ? analysis.getOcrEditedResult() : analysis.getOcrRawResult())
-                .aiAnalysisResult(analysis.getAiAnalysisResult())
+                .aiAnalysisResult(aiAnalysisResult)
                 .build();
     }
 }
