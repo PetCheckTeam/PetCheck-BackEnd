@@ -1,3 +1,6 @@
+// 7월 28일 화요일 수정
+// 수정 내용: pets 테이블에 매핑되는 알러지 필드와 등록·수정 시 값을 반영하는 로직을 추가했습니다.
+// 수정 이유: 반려동물별 알러지 정보를 선택적으로 저장하고 관리하기 위함입니다.
 package com.petcheck.server.domain.pet.entity;
 
 import com.petcheck.server.domain.member.entity.Member;
@@ -31,7 +34,7 @@ public class Pet {
     private String species; // 예: DOG, CAT
 
     @Column(name = "allergy", nullable = true, length = 255)
-    private String allergy;
+    private String allergy; // 반려동물의 알러지 정보
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
