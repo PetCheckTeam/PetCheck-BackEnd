@@ -30,20 +30,25 @@ public class Pet {
     @Column(nullable = false)
     private String species; // 예: DOG, CAT
 
+    @Column(name = "allergy", nullable = true, length = 255)
+    private String allergy;
+
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)
     private OffsetDateTime createdAt;
 
     @Builder
-    public Pet(Member member, String name, String species) {
+    public Pet(Member member, String name, String species, String allergy) {
         this.member = member;
         this.name = name;
         this.species = species;
+        this.allergy = allergy;
     }
 
     // 수정 비즈니스 메서드
-    public void updateProfile(String name, String species) {
+    public void updateProfile(String name, String species, String allergy) {
         this.name = name;
         this.species = species;
+        this.allergy = allergy;
     }
 }

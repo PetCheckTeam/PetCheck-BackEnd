@@ -37,6 +37,7 @@ public class PetService {
                 .member(member)
                 .name(request.getName())
                 .species(request.getSpecies())
+                .allergy(request.getAllergy())
                 .build();
 
         Pet savedPet = petRepository.save(pet);
@@ -74,7 +75,7 @@ public class PetService {
             throw new IllegalArgumentException("수정 권한이 없는 반려동물입니다.");
         }
 
-        pet.updateProfile(request.getName(), request.getSpecies());
+        pet.updateProfile(request.getName(), request.getSpecies(), request.getAllergy());
         return PetResponse.from(pet);
     }
 

@@ -9,12 +9,14 @@ public class PetResponse {
     private final Long id;
     private final String name;
     private final String species;
+    private final String allergy;
     private final String createdAt;
 
     public PetResponse(Pet pet) {
         this.id = pet.getId();
         this.name = pet.getName();
         this.species = pet.getSpecies();
+        this.allergy = pet.getAllergy();
         this.createdAt = pet.getCreatedAt() != null ? pet.getCreatedAt().toString() : null;
     }
 
