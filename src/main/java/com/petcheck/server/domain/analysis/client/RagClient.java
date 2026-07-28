@@ -25,12 +25,13 @@ public class RagClient {
     private static final String SEARCH_PATH = "/api/v1/rag/search";
     private static final Duration CONNECT_TIMEOUT = Duration.ofSeconds(2);
     private static final Duration READ_TIMEOUT = Duration.ofSeconds(10);
+    private static final int MAX_ERROR_RESPONSE_LENGTH = 2000;
 
     private final RestTemplate restTemplate;
     private final String searchUrl;
 
     @Autowired
-    public RagClient(@Value("${rag.base-url:http://127.0.0.1:8100}") String baseUrl) {
+    public RagClient(@Value("${rag.base-url}") String baseUrl) {
         this(createRestTemplate(), baseUrl);
     }
 
@@ -59,10 +60,14 @@ public class RagClient {
             }
             return response.getBody();
         } catch (HttpClientErrorException error) {
+            String responseBody = summarizeErrorResponse(error.getResponseBodyAsString());
             throw new RagClientException(
                     RagClientException.Type.CLIENT_ERROR,
                     error.getStatusCode().value(),
-                    "RAG 서버가 요청을 거부했습니다. HTTP " + error.getStatusCode().value(),
+                    "RAG 서버가 요청을 거부했습니다. HTTP "
+                            + error.getStatusCode().value()
+                            + ", 응답: "
+                            + responseBody,
                     error
             );
         } catch (HttpServerErrorException error) {
@@ -110,6 +115,18 @@ public class RagClient {
         return baseUrl.endsWith("/")
                 ? baseUrl.substring(0, baseUrl.length() - 1)
                 : baseUrl;
+    }
+
+    private static String summarizeErrorResponse(String responseBody) {
+        if (responseBody == null || responseBody.isBlank()) {
+            return "(응답 본문 없음)";
+        }
+
+        String trimmedBody = responseBody.strip();
+        if (trimmedBody.length() <= MAX_ERROR_RESPONSE_LENGTH) {
+            return trimmedBody;
+        }
+        return trimmedBody.substring(0, MAX_ERROR_RESPONSE_LENGTH - 3) + "...";
     }
 
     private static boolean isTimeout(Throwable throwable) {

@@ -26,4 +26,4 @@ jwt:
   expiration: 86400000
 
 rag:
-  base-url: ${RAG_BASE_URL:http://127.0.0.1:8100}
+  base-url: ${RAG_BASE_URL}

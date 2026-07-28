@@ -75,6 +75,9 @@ class RagClientTest {
                 .isInstanceOfSatisfying(RagClientException.class, error -> {
                     assertThat(error.getType()).isEqualTo(RagClientException.Type.CLIENT_ERROR);
                     assertThat(error.getStatusCode()).isEqualTo(422);
+                    assertThat(error.getMessage())
+                            .contains("HTTP 422")
+                            .contains("원료명을 찾지 못했습니다.");
                 });
         server.verify();
     }

@@ -91,11 +91,15 @@ public class AnalysisService {
         }
 
         try {
+            String petType = analysis.getPet().getSpecies();
+            int topK = 1;
+            logRagRequest(analysisId, petType, topK, ocrText);
+
             RagSearchRequest request = RagSearchRequest.builder()
                     .analysisId(analysisId)
                     .ocrText(ocrText)
-                    .topK(1)
-                    .petType(analysis.getPet().getSpecies())
+                    .topK(topK)
+                    .petType(petType)
                     .build();
 
             RagSearchResponse response = ragClient.search(request);
@@ -112,6 +116,23 @@ public class AnalysisService {
         }
 
         return analysis.getStatus();
+    }
+
+    private void logRagRequest(Long analysisId, String petType, int topK, String ocrText) {
+        String singleLineText = ocrText.replaceAll("\\R", " ");
+        String preview = singleLineText.length() <= 500
+                ? singleLineText
+                : singleLineText.substring(0, 500);
+
+        log.info(
+                "RAG 요청 데이터 - analysisId: {}, petType: {}, topK: {}, "
+                        + "ocrTextLength: {}, ocrTextPreview: [{}]",
+                analysisId,
+                petType,
+                topK,
+                ocrText.length(),
+                preview
+        );
     }
 
     // 5. [POST /api/v1/analyses/{analysisId}/retry] 분석 재시도
